@@ -550,9 +550,6 @@ contract Referral is IReferral, Ownable {
         _;
     }
     
-    constructor(address _operator) public {
-        operators[_operator]=true;
-    }
 
     function recordReferral(address _user, address _referrer) external override onlyOperator {
         if (_user != address(0)
@@ -569,6 +566,12 @@ contract Referral is IReferral, Ownable {
     // Get the referrer address that referred the user
     function getReferrer(address _user) public override view returns (address) {
         return referrers[_user];
+    }
+    
+    // Update the status of the operator
+    function updateOperator(address _operator, bool _status) external onlyOwner {
+        operators[_operator] = _status;
+        emit OperatorUpdated(_operator, _status);
     }
 
     
