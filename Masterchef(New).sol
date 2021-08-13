@@ -1166,6 +1166,7 @@ contract MasterChef is Ownable, ReentrancyGuard {
         uint256 lastRewardBlock;  // Last block number that Yeldes distribution occurs.
         uint256 accYeldPerShare;   // Accumulated Yeldes per share, times 1e18. See below.
         uint16 depositFeeBP;      // Deposit fee in basis points
+        uint256 lpSupply;
     }
 
     // The Yeld TOKEN!
@@ -1195,6 +1196,10 @@ contract MasterChef is Ownable, ReentrancyGuard {
     // Max referral commission rate: 5%.
     uint16 public constant MAXIMUM_REFERRAL_COMMISSION_RATE = 500;
 
+    event Add(uint256 indexed allocPoint, IERC20 indexed lpToken, uint256 depositFeeBP);
+    event Set(uint256 indexed pid, uint256 indexed allocPoint, uint256 depositFeeBP);
+    event SetReferralCommissionRate( uint256 indexed referralCommissionRate);
+    event UpdateStartBlock( uint256 indexed startBlock);
     event Deposit(address indexed user, uint256 indexed pid, uint256 amount);
     event Withdraw(address indexed user, uint256 indexed pid, uint256 amount);
     event EmergencyWithdraw(address indexed user, uint256 indexed pid, uint256 amount);
@@ -1209,7 +1214,8 @@ contract MasterChef is Ownable, ReentrancyGuard {
         YELDV2 _Yeld,
         uint256 _startBlock,
         address _devAddress,
-        address _feeAddress
+        address _feeAddress,
+        IReferral _referral
        
     ) public {
         Yeld = _Yeld;
@@ -1217,6 +1223,7 @@ contract MasterChef is Ownable, ReentrancyGuard {
 
         devAddress = _devAddress;
         feeAddress = _feeAddress;
+        referral=_referral;
         
     }
 
@@ -1242,8 +1249,11 @@ contract MasterChef is Ownable, ReentrancyGuard {
             allocPoint: _allocPoint,
             lastRewardBlock: lastRewardBlock,
             accYeldPerShare: 0,
-            depositFeeBP: _depositFeeBP
+            depositFeeBP: _depositFeeBP,
+            lpSupply:0
         }));
+        
+        emit Add(_allocPoint,_lpToken,_depositFeeBP);
     }
 
     // Update the given pool's Yeld allocation point and deposit fee. Can only be called by the owner.
@@ -1252,6 +1262,7 @@ contract MasterChef is Ownable, ReentrancyGuard {
         totalAllocPoint = totalAllocPoint.sub(poolInfo[_pid].allocPoint).add(_allocPoint);
         poolInfo[_pid].allocPoint = _allocPoint;
         poolInfo[_pid].depositFeeBP = _depositFeeBP;
+        emit Set(_pid,_allocPoint,_depositFeeBP);
     }
 
     // Return reward multiplier over the given _from to _to block.
@@ -1323,8 +1334,11 @@ contract MasterChef is Ownable, ReentrancyGuard {
                 uint256 depositFee = final_amount.mul(pool.depositFeeBP).div(10000);
                 pool.lpToken.safeTransfer(feeAddress, depositFee);
                 user.amount = user.amount.add(final_amount).sub(depositFee);
+                pool.lpSupply=pool.lpSupply.add(final_amount).sub(depositFee);
+                
             } else {
                 user.amount = user.amount.add(final_amount);
+                pool.lpSupply=pool.lpSupply.add(final_amount);
             }
         }
         user.rewardDebt = user.amount.mul(pool.accYeldPerShare).div(1e18);
@@ -1345,6 +1359,7 @@ contract MasterChef is Ownable, ReentrancyGuard {
         if (_amount > 0) {
             user.amount = user.amount.sub(_amount);
             pool.lpToken.safeTransfer(address(msg.sender), _amount);
+            pool.lpSupply=pool.lpSupply.sub(_amount);
         }
         user.rewardDebt = user.amount.mul(pool.accYeldPerShare).div(1e18);
         emit Withdraw(msg.sender, _pid, _amount);
@@ -1394,16 +1409,11 @@ contract MasterChef is Ownable, ReentrancyGuard {
         emit UpdateEmissionRate(msg.sender, _YeldPerBlock);
     }
 
-    // Update the referral contract address by the owner
-    function setReferralAddress(IReferral _referral) external onlyOwner {
-        referral = _referral;
-        emit SetReferralAddress(msg.sender, _referral);
-    }
-
     // Update referral commission rate by the owner
     function setReferralCommissionRate(uint16 _referralCommissionRate) external onlyOwner {
         require(_referralCommissionRate <= MAXIMUM_REFERRAL_COMMISSION_RATE, "setReferralCommissionRate: invalid referral commission rate basis points");
         referralCommissionRate = _referralCommissionRate;
+        emit SetReferralCommissionRate(_referralCommissionRate);
     }
 
     // Pay referral commission to the referrer who referred this user.
@@ -1421,8 +1431,9 @@ contract MasterChef is Ownable, ReentrancyGuard {
 
     // Only update before start of farm
     function updateStartBlock(uint256 _startBlock) public onlyOwner {
-       require(startBlock > block.number, "Farm already started");
+       require(startBlock < block.number, "Farm already started");
        startBlock = _startBlock;
+       emit UpdateStartBlock(_startBlock);
     }
     
     
