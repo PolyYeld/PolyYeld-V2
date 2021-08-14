@@ -1430,14 +1430,17 @@ contract MasterChef is Ownable, ReentrancyGuard {
     }
     
     // Only update before start of farm
-    function updateStartBlock(uint256 _startBlock) public onlyOwner {
-       uint256 length = poolInfo.length;
-      for (uint256 pid = 0; pid < length; ++pid) {
-        PoolInfo storage pool = poolInfo[pid];
-        pool.lastRewardBlock = _startBlock;
-      }
-      startBlock = _startBlock;
-      emit UpdateStartBlock(_startBlock);
+    function updateStartBlock(uint256 _newStartBlock) external onlyOwner {
+        require(block.number < startBlock, "cannot change start block if farm has already started");
+        require(block.number < _newStartBlock, "cannot set start block in the past");
+        uint256 length = poolInfo.length;
+        for (uint256 pid = 0; pid < length; ++pid) {
+            PoolInfo storage pool = poolInfo[pid];
+            pool.lastRewardBlock = _newStartBlock;
+        }
+        startBlock = _newStartBlock;
+
+        emit UpdateStartBlock(startBlock);
     }
     
     
